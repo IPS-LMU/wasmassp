@@ -477,8 +477,82 @@ A_F_LIST        funclist[] = {
     {NULL, NULL, NULL, 0, 0, AF_NONE}
 };
 
+EMSCRIPTEN_KEEPALIVE
+uint8_t* create_buffer(int width, int height) {
+  return malloc(width * height * 4 * sizeof(uint8_t));
+}
 
 EMSCRIPTEN_KEEPALIVE
-int version(int x) {
-  return LINtodB(x);
+void destroy_buffer(uint8_t* p) {
+  free(p);
+}
+
+
+/*
+ * This function performs an ASSP analysis routine 
+ * @param audio_in pointer to an uint8_t buffer containing the audio samples
+ * @param function_id int specifying which function to apply (currently only the 
+ * default options are available)
+ */
+EMSCRIPTEN_KEEPALIVE
+int performAssp(uint8_t* audio_in, int function_id) {
+  // this is where the magic SHOULD happen :-)
+  return 10;
+}
+
+
+
+/*
+ * Wrapper functions for filtering and for ksv f0 analysis 
+ *
+ * all other analyses come with a 'computeXYZ' functions with identical 
+ * signatures but for various reasons these two do not. These function provide
+ * wrappers.
+ */
+DOBJ           *
+computeFilter(DOBJ * inpDOp, AOPTS * anaOpts, DOBJ * outDOp)
+{
+    int             FILE_IN,
+                    FILE_OUT,
+                    CREATED;
+    DOBJ           *filtDOp = NULL;
+    if (inpDOp == NULL || anaOpts == NULL || outDOp != NULL) {
+        setAsspMsg(AEB_BAD_ARGS, "computeFilter");
+        return (NULL);
+    }
+    FILE_IN = FILE_OUT = CREATED = FALSE;
+    /*
+     * check input object 
+     */
+    if (inpDOp->fp != NULL) {
+        if (inpDOp->numRecords <= 0) {
+            setAsspMsg(AEF_EMPTY, inpDOp->filePath);
+            return (NULL);
+        }
+        FILE_IN = TRUE;
+    } else if (anaOpts == NULL ||
+               (anaOpts != NULL && !(anaOpts->options & AOPT_INIT_ONLY))) {
+        if (inpDOp->dataBuffer == NULL || inpDOp->bufNumRecs <= 0) {
+            setAsspMsg(AED_NO_DATA, "(computeFilter)");
+            return (NULL);
+        }
+    }
+
+
+    filtDOp = createFilter(inpDOp, anaOpts);
+    if (filtDOp == NULL) {
+        return (NULL);
+    }
+
+    if ((outDOp = filterSignal(inpDOp, filtDOp, outDOp)) == NULL) {
+        return (NULL);
+    }
+    filtDOp = destroyFilter(filtDOp);
+    return (outDOp);
+}
+
+DOBJ           *
+computeF0(DOBJ * inpDOp, AOPTS * anaOpts, DOBJ * outDOp)
+{
+    return computeKSV(inpDOp, anaOpts, outDOp, (DOBJ *) NULL);
 }
