@@ -12,31 +12,24 @@ Test12 (see console 4 output)
 <script>
 
   async function loadAudio(src) {
-    // Load image
-    const imgBlob = await fetch(src).then(resp => resp.blob());
-    // const img = await createImageBitmap(imgBlob);
-    // // Make canvas same size as image
-    // const canvas = document.createElement('canvas');
-    // canvas.width = img.width;
-    // canvas.height = img.height;
-    // // Draw image onto canvas
-    // const ctx = canvas.getContext('2d');
-    // ctx.drawImage(img, 0, 0);
-    return ctx.getImageData(0, 0, img.width, img.height);
+    // Load audio
+    const audio_ab = await fetch(src).then(resp => resp.arrayBuffer());
+    return audio_ab;
   }
 
   Module.onRuntimeInitialized = async _ => {
     const api = {
-      performAssp: Module.cwrap('performAssp', 'number', []),
+      performAssp: Module.cwrap('performAssp', 'number', ['string', 'string']),
       create_buffer: Module.cwrap('create_buffer', 'number', ['number', 'number']),
       destroy_buffer: Module.cwrap('destroy_buffer', '', ['number'])
     };
-    const image = await loadAudio('/image.jpg');
-    const p = api.create_buffer(image.width, image.height);
-    Module.HEAP8.set(image.data, p);
-    // ... performAssp
-    console.log(api.performAssp(2));
-    api.destroy_buffer(p);
+    // const audioFileBuffer = await loadAudio('/resources/msajc003.wav');
+    // const p = api.create_buffer(image.width, image.height);
+    // Module.HEAP8.set(image.data, p);
+    
+    // save arraybufferview to FS -> so fopen() in wasmassp works
+    // FS.writeFile('audiofile.wav', new DataView(audioFileBuffer));
+    console.log(api.performAssp("resources/msajc003.wav", "forest"));
     
   };
 </script>

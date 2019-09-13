@@ -15,7 +15,8 @@
 #include <filter.h>
 #include <ksv.h>
 #include <ctype.h>              /* tolower() */
-
+#include <string.h>
+#include <stdio.h>
 
 /*
  * This list is used to map gender option values from R to the appropriate 
@@ -487,6 +488,148 @@ void destroy_buffer(uint8_t* p) {
   free(p);
 }
 
+// code taken from dobj2AsspDataObj(DOBJ * data)
+// & getDObjTrackData()
+int dobj2AsspDataObj(DOBJ * data){
+
+    DDESC          *desc = NULL;
+    TSSFF_Generic  *genVar = NULL;
+    int             i,
+                    n;
+    /*
+     * count tracks
+     */
+    for (n = 0, desc = &(data->ddl); desc != NULL; desc = desc->next) {
+        n++;
+    }
+
+    /*
+     * create result, a list with a matrix for each track
+     */
+    // PROTECT(ans = allocVector(VECSXP, n));
+    /*
+     * create list of tracks and formats
+     */
+    // PROTECT(tracks = allocVector(STRSXP, n));
+    // PROTECT(trackFormats = allocVector(STRSXP, n));
+    for (i = 0, desc = &(data->ddl); desc != NULL; desc = desc->next, i++) {
+        // SET_STRING_ELT(tracks, i, mkChar(desc->ident));
+        // SET_STRING_ELT(trackFormats, i,
+        //                mkChar(asspDF2ssffString(desc->format)));
+        /*
+         * fill tracks with data
+         */
+        printf ("Printing track %s.\n", desc->ident);
+
+        // from getDObjTrackData:
+        void           *tempBuffer,
+                      *bufPtr;
+        int             i,
+                        m,
+                        n;
+        tempBuffer = malloc((size_t) data->recordSize);
+        // SET_VECTOR_ELT(ans, i, getDObjTrackData(data, desc));
+
+        /*
+          * various pointers for variuos data sizes
+          */
+          uint8_t        *u8Ptr;
+          int8_t         *i8Ptr;
+          uint16_t       *u16Ptr;
+          int16_t        *i16Ptr;
+          uint32_t       *u32Ptr;
+          int32_t        *i32Ptr;
+          float          *f32Ptr;
+          double         *f64Ptr;
+
+          double         *Rans;
+          int            *Ians;
+          uint8_t        *bPtr;
+          bPtr = (uint8_t *) tempBuffer;
+          i = 0;                      /* initial index in buffer */
+
+
+          for (m = 0; m < data->bufNumRecs; m++) {
+              printf("\n");
+              bufPtr = (void *)((char *)data->dataBuffer + m * data->recordSize);
+              memcpy(tempBuffer, bufPtr, (size_t) data->recordSize);
+              switch (desc->format) {
+              case DF_UINT8:
+                  {
+                      u8Ptr = &bPtr[desc->offset];
+                      for (n = 0; n < desc->numFields; n++) {
+                          printf("%i\n", (unsigned int) u8Ptr[n]);
+                      }
+                  }
+                  break;
+              case DF_INT8:
+                  {
+                      i8Ptr = (int8_t *) & bPtr[desc->offset];
+                      for (n = 0; n < desc->numFields; n++) {
+                          printf("%i\t", (int) u8Ptr[n]);
+                      }
+                  }
+                  break;
+              case DF_UINT16:
+                  {
+                      u16Ptr = (uint16_t *) & bPtr[desc->offset];
+                      for (n = 0; n < desc->numFields; n++) {
+                        printf("%i\t", (unsigned int) u16Ptr[n]);
+                      }
+                  }
+                  break;
+              case DF_INT16:
+                  {
+                      i16Ptr = (int16_t *) & bPtr[desc->offset];
+                      for (n = 0; n < desc->numFields; n++) {
+                          printf("%i\t", (int) i16Ptr[n]);
+                      }
+                  }
+                  break;
+              case DF_UINT32:
+                  {
+                      u32Ptr = (uint32_t *) & bPtr[desc->offset];
+                      for (n = 0; n < desc->numFields; n++) {
+                          printf("%lu\t", (unsigned long) u32Ptr[n]);
+                      }
+                  }
+                  break;
+              case DF_INT32:
+                  {
+                      i32Ptr = (int32_t *) & bPtr[desc->offset];
+                      for (n = 0; n < desc->numFields; n++) {
+                          printf("%li\t", (long) i32Ptr[n]);
+                      }
+                  }
+                  break;
+              case DF_REAL32:
+                  {
+                      f32Ptr = (float *) &bPtr[desc->offset];
+                      for (n = 0; n < desc->numFields; n++) {
+                           printf("%f\t", (double) f32Ptr[n]);
+                      }
+                  }
+                  break;
+              case DF_REAL64:
+                  {
+                      f64Ptr = (double *) &bPtr[desc->offset];
+                      for (n = 0; n < desc->numFields; n++) {
+                          printf("%f\t", (double) f64Ptr[n]);
+                      }
+                  }
+                  break;
+              default:
+                  fprintf(stderr, "Hi, I just landed in the default of a switch in dataobj.c."
+                      "I am sorry, I should not be here and I don't know what to do.");
+                  break;
+              }
+          }
+          free(tempBuffer);
+    }
+
+    return 0;
+}
+
 
 /*
  * This function performs an ASSP analysis routine 
@@ -495,11 +638,73 @@ void destroy_buffer(uint8_t* p) {
  * default options are available)
  */
 EMSCRIPTEN_KEEPALIVE
-int performAssp(uint8_t* audio_in, int function_id) {
-  // this is where the magic SHOULD happen :-)
-  return 10;
-}
+int performAssp(const char* audio_path, const char* function_name) {
 
+  printf("%s\n", "### starting performAssp()");
+  AOPTS           OPTS;
+  AOPTS          *opt = &OPTS;
+  A_F_LIST       *anaFunc = funclist;
+
+  DOBJ           *inPtr,
+                *outPtr;
+
+  /*
+    * Second parameter must be ASSP function name
+    * check for validity and pick the right function descriptor 
+    */
+  while (anaFunc->funcNum != AF_NONE) {
+      if (strcmp(function_name, anaFunc->fName) == 0){
+        printf("Performing: %s\n", anaFunc->fName);
+        break;
+      }
+      anaFunc++;
+  }
+  if (anaFunc->funcNum == AF_NONE){
+      fprintf(stderr, "Invalid analysis function in performAssp.c");
+      return 1;
+  }
+
+  /*
+    * generate the default settings for the analysis function
+    */
+  if ((anaFunc->setFunc) (opt) == -1){
+      fprintf(stderr, "%d\t$%s\n", asspMsgNum, getAsspMsg(asspMsgNum));
+      return 1;
+  }
+  
+  /*
+    * open
+    */
+  inPtr = asspFOpen(strdup(audio_path), AFO_READ, (DOBJ *) NULL);
+  if (inPtr == NULL){
+      fprintf(stderr, "%s (%s)", getAsspMsg(asspMsgNum), strdup(audio_path));
+  }
+
+  /*
+    * run the function (as pointed to in the descriptor) to generate
+    * the output object 
+    */
+  outPtr = (anaFunc->compProc) (inPtr, opt, (DOBJ *) NULL);
+  if (outPtr == NULL) {
+      asspFClose(inPtr, AFC_FREE);
+      fprintf(stderr, "%s (%s)", getAsspMsg(asspMsgNum), strdup(audio_path));
+  }
+
+  /*
+    * input data object no longer needed 
+    */
+  asspFClose(inPtr, AFC_FREE);
+
+  /*
+    * TODO write to file
+    */
+  int tmp = dobj2AsspDataObj(outPtr);
+  
+  asspFClose(outPtr, AFC_FREE);
+  
+  printf("%s\n", "done!");
+  return 0;
+}
 
 
 /*
