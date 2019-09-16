@@ -478,154 +478,148 @@ A_F_LIST        funclist[] = {
     {NULL, NULL, NULL, 0, 0, AF_NONE}
 };
 
-EMSCRIPTEN_KEEPALIVE
-uint8_t* create_buffer(int width, int height) {
-  return malloc(width * height * 4 * sizeof(uint8_t));
-}
-
-EMSCRIPTEN_KEEPALIVE
-void destroy_buffer(uint8_t* p) {
-  free(p);
-}
-
-// code taken from dobj2AsspDataObj(DOBJ * data)
-// & getDObjTrackData()
-int dobj2AsspDataObj(DOBJ * data){
+/* write DOBJ to a tab sep. values file
+ * code taken from dobj2AsspDataObj(DOBJ * data)
+ * & getDObjTrackData()
+ */ 
+int dobj2tsv(DOBJ * data, FILE *f){
 
     DDESC          *desc = NULL;
     TSSFF_Generic  *genVar = NULL;
     int             i,
+                    m,
                     n;
-    /*
-     * count tracks
-     */
-    for (n = 0, desc = &(data->ddl); desc != NULL; desc = desc->next) {
-        n++;
-    }
 
     /*
-     * create result, a list with a matrix for each track
+     * print column names
      */
-    // PROTECT(ans = allocVector(VECSXP, n));
-    /*
-     * create list of tracks and formats
-     */
-    // PROTECT(tracks = allocVector(STRSXP, n));
-    // PROTECT(trackFormats = allocVector(STRSXP, n));
+    fprintf(f, "ftime\t");
     for (i = 0, desc = &(data->ddl); desc != NULL; desc = desc->next, i++) {
-        // SET_STRING_ELT(tracks, i, mkChar(desc->ident));
-        // SET_STRING_ELT(trackFormats, i,
-        //                mkChar(asspDF2ssffString(desc->format)));
-        /*
-         * fill tracks with data
-         */
-        printf ("Printing track %s.\n", desc->ident);
+      for (n = 0; n < desc->numFields; n++) {
+        fprintf(f, "%s_%i(%s)", desc->ident, n + 1, desc->unit);
+        if(!(desc->next == NULL && n == desc->numFields - 1)) fprintf(f, "\t");
+      }
+     }
+    fprintf(f, "\n"); // done with row
 
-        // from getDObjTrackData:
-        void           *tempBuffer,
-                      *bufPtr;
-        int             i,
-                        m,
-                        n;
-        tempBuffer = malloc((size_t) data->recordSize);
-        // SET_VECTOR_ELT(ans, i, getDObjTrackData(data, desc));
+    /*
+     * print every record
+     */
 
-        /*
-          * various pointers for variuos data sizes
-          */
-          uint8_t        *u8Ptr;
-          int8_t         *i8Ptr;
-          uint16_t       *u16Ptr;
-          int16_t        *i16Ptr;
-          uint32_t       *u32Ptr;
-          int32_t        *i32Ptr;
-          float          *f32Ptr;
-          double         *f64Ptr;
+    // buffer to hold current record
+    void           *tempBuffer,
+                    *bufPtr;
 
-          double         *Rans;
-          int            *Ians;
-          uint8_t        *bPtr;
-          bPtr = (uint8_t *) tempBuffer;
-          i = 0;                      /* initial index in buffer */
+    tempBuffer = malloc((size_t) data->recordSize);
+
+    /*
+     * various pointers for variuos data sizes
+     */
+      uint8_t        *u8Ptr;
+      int8_t         *i8Ptr;
+      uint16_t       *u16Ptr;
+      int16_t        *i16Ptr;
+      uint32_t       *u32Ptr;
+      int32_t        *i32Ptr;
+      float          *f32Ptr;
+      double         *f64Ptr;
+
+      double         *Rans;
+      int            *Ians;
+      uint8_t        *bPtr;
+      bPtr = (uint8_t *) tempBuffer;
+      i = 0;                      /* initial index in buffer */
 
 
-          for (m = 0; m < data->bufNumRecs; m++) {
-              printf("\n");
-              bufPtr = (void *)((char *)data->dataBuffer + m * data->recordSize);
-              memcpy(tempBuffer, bufPtr, (size_t) data->recordSize);
-              switch (desc->format) {
-              case DF_UINT8:
-                  {
-                      u8Ptr = &bPtr[desc->offset];
-                      for (n = 0; n < desc->numFields; n++) {
-                          printf("%i\n", (unsigned int) u8Ptr[n]);
-                      }
+      for (m = 0; m < data->bufNumRecs; m++) {
+          // print frame time column
+          fprintf(f, "%f\t", data->Start_Time + m * 1/data->dataRate);
+          bufPtr = (void *)((char *)data->dataBuffer + m * data->recordSize);
+          memcpy(tempBuffer, bufPtr, (size_t) data->recordSize);
+          for (i = 0, desc = &(data->ddl); desc != NULL; desc = desc->next, i++) {
+          switch (desc->format) {
+          case DF_UINT8:
+              {
+                  u8Ptr = &bPtr[desc->offset];
+                  for (n = 0; n < desc->numFields; n++) {
+                      fprintf(f, "%i", (unsigned int) u8Ptr[n]);
+                      if(!(desc->next == NULL && n == desc->numFields - 1)) fprintf(f, "\t");
                   }
-                  break;
-              case DF_INT8:
-                  {
-                      i8Ptr = (int8_t *) & bPtr[desc->offset];
-                      for (n = 0; n < desc->numFields; n++) {
-                          printf("%i\t", (int) u8Ptr[n]);
-                      }
-                  }
-                  break;
-              case DF_UINT16:
-                  {
-                      u16Ptr = (uint16_t *) & bPtr[desc->offset];
-                      for (n = 0; n < desc->numFields; n++) {
-                        printf("%i\t", (unsigned int) u16Ptr[n]);
-                      }
-                  }
-                  break;
-              case DF_INT16:
-                  {
-                      i16Ptr = (int16_t *) & bPtr[desc->offset];
-                      for (n = 0; n < desc->numFields; n++) {
-                          printf("%i\t", (int) i16Ptr[n]);
-                      }
-                  }
-                  break;
-              case DF_UINT32:
-                  {
-                      u32Ptr = (uint32_t *) & bPtr[desc->offset];
-                      for (n = 0; n < desc->numFields; n++) {
-                          printf("%lu\t", (unsigned long) u32Ptr[n]);
-                      }
-                  }
-                  break;
-              case DF_INT32:
-                  {
-                      i32Ptr = (int32_t *) & bPtr[desc->offset];
-                      for (n = 0; n < desc->numFields; n++) {
-                          printf("%li\t", (long) i32Ptr[n]);
-                      }
-                  }
-                  break;
-              case DF_REAL32:
-                  {
-                      f32Ptr = (float *) &bPtr[desc->offset];
-                      for (n = 0; n < desc->numFields; n++) {
-                           printf("%f\t", (double) f32Ptr[n]);
-                      }
-                  }
-                  break;
-              case DF_REAL64:
-                  {
-                      f64Ptr = (double *) &bPtr[desc->offset];
-                      for (n = 0; n < desc->numFields; n++) {
-                          printf("%f\t", (double) f64Ptr[n]);
-                      }
-                  }
-                  break;
-              default:
-                  fprintf(stderr, "Hi, I just landed in the default of a switch in dataobj.c."
-                      "I am sorry, I should not be here and I don't know what to do.");
-                  break;
               }
+              break;
+          case DF_INT8:
+              {
+                  i8Ptr = (int8_t *) & bPtr[desc->offset];
+                  for (n = 0; n < desc->numFields; n++) {
+                      fprintf(f, "%i", (int) u8Ptr[n]);
+                      if(!(desc->next == NULL && n == desc->numFields - 1)) fprintf(f, "\t");
+                  }
+              }
+              break;
+          case DF_UINT16:
+              {
+                  u16Ptr = (uint16_t *) & bPtr[desc->offset];
+                  for (n = 0; n < desc->numFields; n++) {
+                    fprintf(f, "%i", (unsigned int) u16Ptr[n]);
+                      if(!(desc->next == NULL && n == desc->numFields - 1)) fprintf(f, "\t");
+                  }
+              }
+              break;
+          case DF_INT16:
+              {
+                  i16Ptr = (int16_t *) & bPtr[desc->offset];
+                  for (n = 0; n < desc->numFields; n++) {
+                      fprintf(f, "%i", (int) i16Ptr[n]);
+                      if(!(desc->next == NULL && n == desc->numFields - 1)) fprintf(f, "\t");
+                  }
+              }
+              break;
+          case DF_UINT32:
+              {
+                  u32Ptr = (uint32_t *) & bPtr[desc->offset];
+                  for (n = 0; n < desc->numFields; n++) {
+                      fprintf(f, "%lu", (unsigned long) u32Ptr[n]);
+                      if(!(desc->next == NULL && n == desc->numFields - 1)) fprintf(f, "\t");
+                  }
+              }
+              break;
+          case DF_INT32:
+              {
+                  i32Ptr = (int32_t *) & bPtr[desc->offset];
+                  for (n = 0; n < desc->numFields; n++) {
+                      fprintf(f, "%li", (long) i32Ptr[n]);
+                      if(!(desc->next == NULL && n == desc->numFields - 1)) fprintf(f, "\t");
+                  }
+              }
+              break;
+          case DF_REAL32:
+              {
+                  f32Ptr = (float *) &bPtr[desc->offset];
+                  for (n = 0; n < desc->numFields; n++) {
+                        fprintf(f, "%f", (double) f32Ptr[n]);
+                      if(!(desc->next == NULL && n == desc->numFields - 1)) fprintf(f, "\t");
+                  }
+              }
+              break;
+          case DF_REAL64:
+              {
+                  f64Ptr = (double *) &bPtr[desc->offset];
+                  for (n = 0; n < desc->numFields; n++) {
+                      fprintf(f, "%f", (double) f64Ptr[n]);
+                      if(!(desc->next == NULL && n == desc->numFields - 1)) fprintf(f, "\t");
+                  }
+              }
+              break;
+          default:
+              fprintf(stderr, "Hi, I just landed in the default of a switch in dataobj.c."
+                  "I am sorry, I should not be here and I don't know what to do.");
+              break;
+          } // switch
           }
-          free(tempBuffer);
-    }
+          fprintf(f, "\n"); // end of row
+      } // for
+      // clean up
+      free(tempBuffer);
 
     return 0;
 }
@@ -638,9 +632,11 @@ int dobj2AsspDataObj(DOBJ * data){
  * default options are available)
  */
 EMSCRIPTEN_KEEPALIVE
-int performAssp(const char* audio_path, const char* function_name) {
+int performAssp(const char* audio_path, 
+                const char* out_path, 
+                const char* function_name,
+                const char* file_type) {
 
-  printf("%s\n", "### starting performAssp()");
   AOPTS           OPTS;
   AOPTS          *opt = &OPTS;
   A_F_LIST       *anaFunc = funclist;
@@ -649,18 +645,17 @@ int performAssp(const char* audio_path, const char* function_name) {
                 *outPtr;
 
   /*
-    * Second parameter must be ASSP function name
+    * Third parameter must be ASSP function name
     * check for validity and pick the right function descriptor 
     */
   while (anaFunc->funcNum != AF_NONE) {
       if (strcmp(function_name, anaFunc->fName) == 0){
-        printf("Performing: %s\n", anaFunc->fName);
         break;
       }
       anaFunc++;
   }
   if (anaFunc->funcNum == AF_NONE){
-      fprintf(stderr, "Invalid analysis function in performAssp.c");
+      fprintf(stderr, "Invalid analysis function in performAssp.c: %s\n", function_name);
       return 1;
   }
 
@@ -677,7 +672,7 @@ int performAssp(const char* audio_path, const char* function_name) {
     */
   inPtr = asspFOpen(strdup(audio_path), AFO_READ, (DOBJ *) NULL);
   if (inPtr == NULL){
-      fprintf(stderr, "%s (%s)", getAsspMsg(asspMsgNum), strdup(audio_path));
+      fprintf(stderr, "%s (%s)\n", getAsspMsg(asspMsgNum), strdup(audio_path));
   }
 
   /*
@@ -687,22 +682,35 @@ int performAssp(const char* audio_path, const char* function_name) {
   outPtr = (anaFunc->compProc) (inPtr, opt, (DOBJ *) NULL);
   if (outPtr == NULL) {
       asspFClose(inPtr, AFC_FREE);
-      fprintf(stderr, "%s (%s)", getAsspMsg(asspMsgNum), strdup(audio_path));
+      fprintf(stderr, "%s (%s)\n", getAsspMsg(asspMsgNum), strdup(audio_path));
   }
 
   /*
-    * input data object no longer needed 
-    */
+   * input data object no longer needed 
+   */
   asspFClose(inPtr, AFC_FREE);
 
   /*
-    * TODO write to file
-    */
-  int tmp = dobj2AsspDataObj(outPtr);
-  
-  asspFClose(outPtr, AFC_FREE);
-  
-  printf("%s\n", "done!");
+   * write to file (either TSV (tab sep. values) or SSFF)
+   * depending on file_type arg
+   */
+  if(strcmp(file_type, "TSV") == 0){
+    FILE *f = fopen(out_path, "w");
+    if (f == NULL){
+        fprintf(stderr, "Error opening out_path file!\n");
+        exit(1);
+    }
+    int res = dobj2tsv(outPtr, f);
+    fclose(f);
+  } else {
+
+    outPtr = asspFOpen(out_path, AFO_WRITE, outPtr);
+    if (outPtr == NULL) {
+        asspFClose(outPtr, AFC_FREE);
+        printf("%s (%s)\n", getAsspMsg(asspMsgNum), strdup(out_path));
+    }
+    asspFClose(outPtr, AFC_FREE);
+  }
   return 0;
 }
 

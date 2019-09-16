@@ -10,7 +10,6 @@ webasembly compilable version of the libassp
     -I assp \
     performAssp.c \
     assp/*.c \
-    --preload-file resources/msajc003.wav \
     --emrun`
 
 - view `emrun --no_browser --port 8080 test.html` (only console output 4 now)

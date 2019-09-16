@@ -6,7 +6,10 @@
     <title>Document</title>
 </head>
 <body>
-Test12 (see console 4 output)
+Test12 (also see console 4 printed output)
+
+<!-- load the d3.js library -->	
+<script src="http://d3js.org/d3.v3.min.js"></script>
 
 <script src="/a.out.js"></script>
 <script>
@@ -19,18 +22,112 @@ Test12 (see console 4 output)
 
   Module.onRuntimeInitialized = async _ => {
     const api = {
-      performAssp: Module.cwrap('performAssp', 'number', ['string', 'string']),
-      create_buffer: Module.cwrap('create_buffer', 'number', ['number', 'number']),
-      destroy_buffer: Module.cwrap('destroy_buffer', '', ['number'])
+      performAssp: Module.cwrap('performAssp', 'number', ['string', 'string', 'string', 'string']),
     };
-    // const audioFileBuffer = await loadAudio('/resources/msajc003.wav');
-    // const p = api.create_buffer(image.width, image.height);
-    // Module.HEAP8.set(image.data, p);
+    // load audio file as arrayBuffer using fetch:
+    const audioFileBuffer = await loadAudio('/resources/msajc003.wav');
     
-    // save arraybufferview to FS -> so fopen() in wasmassp works
-    // FS.writeFile('audiofile.wav', new DataView(audioFileBuffer));
-    console.log(api.performAssp("resources/msajc003.wav", "forest"));
-    
+    // save arraybufferview to FS -> so fopen() in wasmassp can read file
+    FS.writeFile('audiofile.wav', new Uint8Array(audioFileBuffer));
+    // use exposed api function performedAssp:
+    let return_code = api.performAssp("audiofile.wav", // path to audio file that is to be proc.
+                                      "testout.tsv", // path to output file
+                                      "forest", // ASSP function to apply
+                                      "TSV"); // TSV (tab sep values) or SSFF // simple signal file format used in the EMU-SDMS
+    if(return_code === 0){
+      // read resulting tsv file
+      let tsv = FS.readFile("testout.tsv", { encoding: 'utf8' });
+      console.log(tsv);
+      ///////////////////////////
+      // simple vis. using d3js
+
+//Set margins and sizes
+var margin = {
+top: 20,
+bottom: 50,
+right: 30,
+left: 50
+};
+
+var width = 700 - margin.left - margin.right;
+var height = 500 - margin.top - margin.bottom;
+//Create date parser
+var ParseDate = d3.time.format("%d-%b-%y").parse;
+//Create x and y scale to scale inputs
+var xScale = d3.time.scale().range([0, width]);
+var yScale = d3.scale.linear().range([height, 0]);
+
+//Create x and y axes
+var xAxis = d3.svg.axis().scale(xScale)
+.orient("bottom")
+.ticks(5);
+var yAxis = d3.svg.axis().scale(yScale)
+.orient("left")
+.ticks(5);
+
+//Create a line generator
+var valueline = d3.svg.line()
+.x(function(d){
+return xScale(d.date);
+})
+
+.y(function(d){
+return yScale(d.close);
+});
+
+//Create an SVG element and append it to the DOM
+var svgElement = d3.select("body").append("svg")
+.attr({"width": width+margin.left+margin.right, "height": height+margin.top+margin.bottom})
+.append("g")
+.attr("transform","translate("+margin.left+","+margin.top+")");
+
+//parse TSV file
+data = d3.tsv.parse(tsv);
+data.forEach(function(d){
+  d.ftime = +d.ftime //the + sign converts string automagically to number
+  d["fm_1(Hz)"] = +d["fm_1(Hz)"]
+  d["fm_2(Hz)"] = +d["fm_2(Hz)"]
+  d["fm_3(Hz)"] = +d["fm_3(Hz)"]
+  d["fm_4(Hz)"] = +d["fm_4(Hz)"]
+  d["bw_1(Hz)"] = +d["bw_1(Hz)"]
+  d["bw_2(Hz)"] = +d["bw_2(Hz)"]
+  d["bw_3(Hz)"] = +d["bw_3(Hz)"]
+  d["bw_4(Hz)"] = +d["bw_4(Hz)"]
+})
+console.table(data)
+
+//Set the domains of our scales
+xScale.domain(d3.extent(data, function(d){ return d.ftime; }));
+yScale.domain([0, d3.max(data, function(d){ return Math.max(d["fm_4(Hz)"]) })]);
+
+//append the svg path
+//var path = svgElement.append("path").attr("d", valueline(data));
+svgElement.append("path")      // Add the valueline path.
+        .attr("class", "line")
+        .attr("d", valueline(data));
+
+// //Add X Axis
+// var x = svgElement.append("g")
+// .attr("transform", "translate(0,"+height+")")
+// .call(xAxis);
+
+// //Add Y Axis
+// var y = svgElement.append("g")
+// .call(yAxis);
+
+// //Add label to y axis
+// y.append("text")
+// .attr("fill", "#000")
+// .attr("transform", "rotate(-90)")
+// .attr("y", 6)
+// .attr("dy", "0.71em")
+// .attr("text-anchor", "end")
+// .text("Formants (Hz)");
+
+      
+    } else {
+      console.error("unsuccessful run of performAssp()");
+    }
   };
 </script>
 
