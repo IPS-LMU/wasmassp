@@ -3,10 +3,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <!-- including ECharts file -->
+    <script src="node_modules/echarts/dist/echarts.min.js"></script>
     <title>Document</title>
 </head>
 <body>
-Test12 (also see console 4 printed output)
+
+<!-- prepare a DOM container with width and height -->
+<div id="main" style="width: 600px;height:400px;"></div>
 
 <!-- load the d3.js library -->	
 <script src="http://d3js.org/d3.v3.min.js"></script>
@@ -39,92 +43,65 @@ Test12 (also see console 4 printed output)
       let tsv = FS.readFile("testout.tsv", { encoding: 'utf8' });
       console.log(tsv);
       ///////////////////////////
-      // simple vis. using d3js
+      // simple vis. using d3jsplus
 
-//Set margins and sizes
-var margin = {
-top: 20,
-bottom: 50,
-right: 30,
-left: 50
-};
+      //parse TSV file
+      fm = d3.tsv.parse(tsv);
+      fm.forEach(function(d){
+        d.ftime = +d.ftime //the + sign converts string automagically to number
+        d["fm_1(Hz)"] = +d["fm_1(Hz)"]
+        d["fm_2(Hz)"] = +d["fm_2(Hz)"]
+        d["fm_3(Hz)"] = +d["fm_3(Hz)"]
+        d["fm_4(Hz)"] = +d["fm_4(Hz)"]
+        d["bw_1(Hz)"] = +d["bw_1(Hz)"]
+        d["bw_2(Hz)"] = +d["bw_2(Hz)"]
+        d["bw_3(Hz)"] = +d["bw_3(Hz)"]
+        d["bw_4(Hz)"] = +d["bw_4(Hz)"]
+      })
+      console.table(fm)
 
-var width = 700 - margin.left - margin.right;
-var height = 500 - margin.top - margin.bottom;
-//Create date parser
-var ParseDate = d3.time.format("%d-%b-%y").parse;
-//Create x and y scale to scale inputs
-var xScale = d3.time.scale().range([0, width]);
-var yScale = d3.scale.linear().range([height, 0]);
+      fm.map(function (row) {return row.ftime;});
 
-//Create x and y axes
-var xAxis = d3.svg.axis().scale(xScale)
-.orient("bottom")
-.ticks(5);
-var yAxis = d3.svg.axis().scale(yScale)
-.orient("left")
-.ticks(5);
 
-//Create a line generator
-var valueline = d3.svg.line()
-.x(function(d){
-return xScale(d.date);
-})
+      // based on prepared DOM, initialize echarts instance
+      var myChart = echarts.init(document.getElementById('main'));
 
-.y(function(d){
-return yScale(d.close);
-});
+      // specify chart configuration item and data
+      var option = {
+          title: {
+              text: 'forest plotting example using wasmassp (also see console output)'
+          },
+          tooltip: {},
+          xAxis: {
+              data: fm.map(function (row) {return row.ftime;})
+          },
+          yAxis: {},
+          series: [{
+              name: 'fm_1(Hz)',
+              type: 'line',
+              stack: 'fm_1(Hz)',
+              data: fm.map(function (row) {return row['fm_1(Hz)'];})
+          },{
+              name: 'fm_2(Hz)',
+              type: 'line',
+              stack: 'fm_2(Hz)',
+              data: fm.map(function (row) {return row['fm_2(Hz)'];})
+          },{
+              name: 'fm_3(Hz)',
+              type: 'line',
+              stack: 'fm_3(Hz)',
+              data: fm.map(function (row) {return row['fm_3(Hz)'];})
+          },{
+              name: 'fm_4(Hz)',
+              type: 'line',
+              stack: 'fm_4(Hz)',
+              data: fm.map(function (row) {return row['fm_4(Hz)'];})
+          }]
+      };
 
-//Create an SVG element and append it to the DOM
-var svgElement = d3.select("body").append("svg")
-.attr({"width": width+margin.left+margin.right, "height": height+margin.top+margin.bottom})
-.append("g")
-.attr("transform","translate("+margin.left+","+margin.top+")");
+      // // use configuration item and data specified to show chart
+      myChart.setOption(option);
 
-//parse TSV file
-data = d3.tsv.parse(tsv);
-data.forEach(function(d){
-  d.ftime = +d.ftime //the + sign converts string automagically to number
-  d["fm_1(Hz)"] = +d["fm_1(Hz)"]
-  d["fm_2(Hz)"] = +d["fm_2(Hz)"]
-  d["fm_3(Hz)"] = +d["fm_3(Hz)"]
-  d["fm_4(Hz)"] = +d["fm_4(Hz)"]
-  d["bw_1(Hz)"] = +d["bw_1(Hz)"]
-  d["bw_2(Hz)"] = +d["bw_2(Hz)"]
-  d["bw_3(Hz)"] = +d["bw_3(Hz)"]
-  d["bw_4(Hz)"] = +d["bw_4(Hz)"]
-})
-console.table(data)
-
-//Set the domains of our scales
-xScale.domain(d3.extent(data, function(d){ return d.ftime; }));
-yScale.domain([0, d3.max(data, function(d){ return Math.max(d["fm_4(Hz)"]) })]);
-
-//append the svg path
-//var path = svgElement.append("path").attr("d", valueline(data));
-svgElement.append("path")      // Add the valueline path.
-        .attr("class", "line")
-        .attr("d", valueline(data));
-
-// //Add X Axis
-// var x = svgElement.append("g")
-// .attr("transform", "translate(0,"+height+")")
-// .call(xAxis);
-
-// //Add Y Axis
-// var y = svgElement.append("g")
-// .call(yAxis);
-
-// //Add label to y axis
-// y.append("text")
-// .attr("fill", "#000")
-// .attr("transform", "rotate(-90)")
-// .attr("y", 6)
-// .attr("dy", "0.71em")
-// .attr("text-anchor", "end")
-// .text("Formants (Hz)");
-
-      
     } else {
       console.error("unsuccessful run of performAssp()");
     }
