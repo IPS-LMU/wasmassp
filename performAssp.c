@@ -17,6 +17,7 @@
 #include <ctype.h>              /* tolower() */
 #include <string.h>
 #include <stdio.h>
+#include <stdbool.h>
 
 /*
  * This list is used to map gender option values from R to the appropriate 
@@ -673,6 +674,7 @@ int performAssp(const char* audio_path,
   inPtr = asspFOpen(strdup(audio_path), AFO_READ, (DOBJ *) NULL);
   if (inPtr == NULL){
       fprintf(stderr, "%s (%s)\n", getAsspMsg(asspMsgNum), strdup(audio_path));
+      return 1;
   }
 
   /*
@@ -683,6 +685,7 @@ int performAssp(const char* audio_path,
   if (outPtr == NULL) {
       asspFClose(inPtr, AFC_FREE);
       fprintf(stderr, "%s (%s)\n", getAsspMsg(asspMsgNum), strdup(audio_path));
+      return 1;
   }
 
   /*
@@ -768,4 +771,71 @@ DOBJ           *
 computeF0(DOBJ * inpDOp, AOPTS * anaOpts, DOBJ * outDOp)
 {
     return computeKSV(inpDOp, anaOpts, outDOp, (DOBJ *) NULL);
+}
+
+
+//////////////////////////////////
+// begin wrapper functions to set options
+
+int set_options(char* name, 
+                int myint, 
+                double mydouble, 
+                char* mycharp){
+
+      // wrasspOptions = anaFunc->options;
+      //   while (wrasspOptions->name != NULL) {
+      //       if (strcmp(wrasspOptions->name, name) == 0)
+      //           break;
+      //       wrasspOptions++;
+      //   }
+      //   if (wrasspOptions->name == NULL)
+      //       error("Invalid option %s for ASSP analysis %s.", name,
+      //             anaFunc->fName);
+}
+
+EMSCRIPTEN_KEEPALIVE
+int acfana(char* audio_path, 
+           char* out_path,
+           float beginTime,
+           bool centreTime, 
+           float endTime,
+           float windowShift,
+           float windowSize,
+           bool effectiveLength
+          //  const char* window, 
+          //  int analysisOrder, 
+          //  bool energyNormalization,
+          //  bool lengthNormalization
+           ) {
+
+    AOPTS           OPTS;
+    AOPTS          *opt = &OPTS;
+    A_F_LIST       *anaFunc = funclist;
+
+  anaFunc = &anaFunc[0];
+
+  /*
+    * generate the default settings for the analysis function
+    */
+  if ((anaFunc->setFunc) (opt) == -1){
+      fprintf(stderr, "%d\t$%s\n", asspMsgNum, getAsspMsg(asspMsgNum));
+      return 1;
+  }
+
+  // overwrite with args
+  opt->beginTime = beginTime;
+  if (centreTime) {
+      opt->options |= AOPT_USE_CTIME;
+  } else {
+      opt->options &= ~AOPT_USE_CTIME;
+  }
+  opt->endTime = endTime;
+  opt->msShift = windowShift;
+  opt->msSize = windowSize;
+  if (effectiveLength) {
+    opt->options |= AOPT_EFFECTIVE;
+  }
+    printf("hello world\n");
+    printf("%d\n", centreTime);
+
 }
