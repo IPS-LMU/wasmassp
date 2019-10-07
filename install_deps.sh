@@ -7,4 +7,5 @@ cd cJSON
 mkdir build                                      
 cd build
 cmake ..
-make
+make 
+make DESTDIR=temp install
