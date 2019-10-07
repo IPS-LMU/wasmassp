@@ -26,27 +26,8 @@
 
   Module.onRuntimeInitialized = async _ => {
     const api = {
-      performAssp: Module.cwrap('performAssp', 'number', ['string', 'string', 'string', 'string']),
-      acfana: Module.cwrap('acfana', 'number', [
-        'string', // audio_path
-        'string', // out_path
-        'number', // beginTime (default 0.0)
-        'number', // centerTime (default FALSE)
-        'number', // endTime (default 0.0)
-      ]),
+      performAssp: Module.cwrap('performAssp', 'number', ['string', 'string', 'string', 'string'])
     };
-
-    // const char* out_path,
-    //              float beginTime,
-    //              bool centerTime = FALSE, 
-    //        float endTime = 0.0, 
-    //        float windowShift = 5.0, 
-    //        float windowSize = 20.0, 
-    //        bool effectiveLength = TRUE, 
-    //        const char* window = "BLACKMAN", 
-    //        int analysisOrder = 0, 
-    //        bool energyNormalization = FALSE,
-    //        bool lengthNormalization = FALSE
 
     // load audio file as arrayBuffer using fetch:
     const audioFileBuffer = await loadAudio('/resources/msajc003.wav');
@@ -57,7 +38,9 @@
     let return_code = api.performAssp("audiofile.wav", // path to audio file that is to be proc.
                                       "testout.tsv", // path to output file
                                       "forest", // ASSP function to apply
+                                      JSON.stringify({"windowSize": 20}), // see wrassp help pages for details of available options
                                       "TSV"); // TSV (tab sep values) or SSFF // simple signal file format used in the EMU-SDMS
+    console.log(return_code);                                      
     if(return_code === 0){
       // read resulting tsv file
       let tsv = FS.readFile("testout.tsv", { encoding: 'utf8' });
@@ -119,24 +102,6 @@
               data: fm.map(function (row) {return row['fm_4(Hz)'];})
           }]
       };
-
-      // // use configuration item and data specified to show chart
-      myChart.setOption(option);
-
-      // test all wasmassp functions:
-      api.acfana("audiofile.wav", 
-                 "testout.tsv",
-                 0.0,
-                 0, // 0 is false 1 is true
-                 0.0
-          //  float windowShift = 5.0, 
-          //  float windowSize = 20.0, 
-          //  bool effectiveLength = TRUE, 
-          //  const char* window = "BLACKMAN", 
-          //  int analysisOrder = 0, 
-          //  bool energyNormalization = FALSE,
-          //  bool lengthNormalization = FALSE
-           );
 
     } else {
       console.error("unsuccessful run of performAssp()");

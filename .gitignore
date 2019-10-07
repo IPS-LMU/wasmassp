@@ -2,3 +2,5 @@
 a.out.data
 a.out.js
 a.out.wasm
+node_modules/
+cJSON/

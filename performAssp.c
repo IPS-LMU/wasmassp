@@ -2,6 +2,9 @@
 #include "assp/asspdsp.h" // sic remove this!
 
 #include "wasmassp.h"
+
+#include <cjson/cJSON.h>
+
 #include <asspana.h>
 #include <dataobj.h>
 #include <asspfio.h>
@@ -15,7 +18,7 @@
 #include <filter.h>
 #include <ksv.h>
 #include <ctype.h>              /* tolower() */
-#include <string.h>
+#include <string.h> 
 #include <stdio.h>
 #include <stdbool.h>
 
@@ -634,8 +637,9 @@ int dobj2tsv(DOBJ * data, FILE *f){
  */
 EMSCRIPTEN_KEEPALIVE
 int performAssp(const char* audio_path, 
-                const char* out_path, 
+                const char* out_path,
                 const char* function_name,
+                const char* params_json,
                 const char* file_type) {
 
   AOPTS           OPTS;
@@ -668,6 +672,17 @@ int performAssp(const char* audio_path,
       return 1;
   }
   
+  /*
+  * parse JSON option string
+  */
+ cJSON *json = cJSON_Parse(params_json);
+  // const nx_json* json = nx_json_parse(params_json, 0);
+  // if (json) {
+
+  // }else{
+  //   fprintf(stderr, "couldn't parse params_json\n");
+  // }
+
   /*
     * open
     */
@@ -715,6 +730,9 @@ int performAssp(const char* audio_path,
     asspFClose(outPtr, AFC_FREE);
   }
   return 0;
+  // end:
+  //   cJSON_Delete(json);
+  //   return status;
 }
 
 
@@ -771,71 +789,4 @@ DOBJ           *
 computeF0(DOBJ * inpDOp, AOPTS * anaOpts, DOBJ * outDOp)
 {
     return computeKSV(inpDOp, anaOpts, outDOp, (DOBJ *) NULL);
-}
-
-
-//////////////////////////////////
-// begin wrapper functions to set options
-
-int set_options(char* name, 
-                int myint, 
-                double mydouble, 
-                char* mycharp){
-
-      // wrasspOptions = anaFunc->options;
-      //   while (wrasspOptions->name != NULL) {
-      //       if (strcmp(wrasspOptions->name, name) == 0)
-      //           break;
-      //       wrasspOptions++;
-      //   }
-      //   if (wrasspOptions->name == NULL)
-      //       error("Invalid option %s for ASSP analysis %s.", name,
-      //             anaFunc->fName);
-}
-
-EMSCRIPTEN_KEEPALIVE
-int acfana(char* audio_path, 
-           char* out_path,
-           float beginTime,
-           bool centreTime, 
-           float endTime,
-           float windowShift,
-           float windowSize,
-           bool effectiveLength
-          //  const char* window, 
-          //  int analysisOrder, 
-          //  bool energyNormalization,
-          //  bool lengthNormalization
-           ) {
-
-    AOPTS           OPTS;
-    AOPTS          *opt = &OPTS;
-    A_F_LIST       *anaFunc = funclist;
-
-  anaFunc = &anaFunc[0];
-
-  /*
-    * generate the default settings for the analysis function
-    */
-  if ((anaFunc->setFunc) (opt) == -1){
-      fprintf(stderr, "%d\t$%s\n", asspMsgNum, getAsspMsg(asspMsgNum));
-      return 1;
-  }
-
-  // overwrite with args
-  opt->beginTime = beginTime;
-  if (centreTime) {
-      opt->options |= AOPT_USE_CTIME;
-  } else {
-      opt->options &= ~AOPT_USE_CTIME;
-  }
-  opt->endTime = endTime;
-  opt->msShift = windowShift;
-  opt->msSize = windowSize;
-  if (effectiveLength) {
-    opt->options |= AOPT_EFFECTIVE;
-  }
-    printf("hello world\n");
-    printf("%d\n", centreTime);
-
 }
