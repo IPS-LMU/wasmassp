@@ -675,7 +675,9 @@ int performAssp(const char* audio_path,
   /*
   * parse JSON option string
   */
+ fprintf(stderr, "hello\n");
  cJSON *json = cJSON_Parse(params_json);
+ //char *string = cJSON_Print(params_json);
   // const nx_json* json = nx_json_parse(params_json, 0);
   // if (json) {
 
@@ -686,49 +688,49 @@ int performAssp(const char* audio_path,
   /*
     * open
     */
-  inPtr = asspFOpen(strdup(audio_path), AFO_READ, (DOBJ *) NULL);
-  if (inPtr == NULL){
-      fprintf(stderr, "%s (%s)\n", getAsspMsg(asspMsgNum), strdup(audio_path));
-      return 1;
-  }
+//   inPtr = asspFOpen(strdup(audio_path), AFO_READ, (DOBJ *) NULL);
+//   if (inPtr == NULL){
+//       fprintf(stderr, "%s (%s)\n", getAsspMsg(asspMsgNum), strdup(audio_path));
+//       return 1;
+//   }
 
-  /*
-    * run the function (as pointed to in the descriptor) to generate
-    * the output object 
-    */
-  outPtr = (anaFunc->compProc) (inPtr, opt, (DOBJ *) NULL);
-  if (outPtr == NULL) {
-      asspFClose(inPtr, AFC_FREE);
-      fprintf(stderr, "%s (%s)\n", getAsspMsg(asspMsgNum), strdup(audio_path));
-      return 1;
-  }
+//   /*
+//     * run the function (as pointed to in the descriptor) to generate
+//     * the output object 
+//     */
+//   outPtr = (anaFunc->compProc) (inPtr, opt, (DOBJ *) NULL);
+//   if (outPtr == NULL) {
+//       asspFClose(inPtr, AFC_FREE);
+//       fprintf(stderr, "%s (%s)\n", getAsspMsg(asspMsgNum), strdup(audio_path));
+//       return 1;
+//   }
 
-  /*
-   * input data object no longer needed 
-   */
-  asspFClose(inPtr, AFC_FREE);
+//   /*
+//    * input data object no longer needed 
+//    */
+//   asspFClose(inPtr, AFC_FREE);
 
-  /*
-   * write to file (either TSV (tab sep. values) or SSFF)
-   * depending on file_type arg
-   */
-  if(strcmp(file_type, "TSV") == 0){
-    FILE *f = fopen(out_path, "w");
-    if (f == NULL){
-        fprintf(stderr, "Error opening out_path file!\n");
-        exit(1);
-    }
-    int res = dobj2tsv(outPtr, f);
-    fclose(f);
-  } else {
+//   /*
+//    * write to file (either TSV (tab sep. values) or SSFF)
+//    * depending on file_type arg
+//    */
+//   if(strcmp(file_type, "TSV") == 0){
+//     FILE *f = fopen(out_path, "w");
+//     if (f == NULL){
+//         fprintf(stderr, "Error opening out_path file!\n");
+//         exit(1);
+//     }
+//     int res = dobj2tsv(outPtr, f);
+//     fclose(f);
+//   } else {
 
-    outPtr = asspFOpen(out_path, AFO_WRITE, outPtr);
-    if (outPtr == NULL) {
-        asspFClose(outPtr, AFC_FREE);
-        printf("%s (%s)\n", getAsspMsg(asspMsgNum), strdup(out_path));
-    }
-    asspFClose(outPtr, AFC_FREE);
-  }
+//     outPtr = asspFOpen(out_path, AFO_WRITE, outPtr);
+//     if (outPtr == NULL) {
+//         asspFClose(outPtr, AFC_FREE);
+//         printf("%s (%s)\n", getAsspMsg(asspMsgNum), strdup(out_path));
+//     }
+//     asspFClose(outPtr, AFC_FREE);
+//   }
   return 0;
   // end:
   //   cJSON_Delete(json);
