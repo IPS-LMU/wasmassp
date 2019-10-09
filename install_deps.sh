@@ -6,7 +6,6 @@ npm install
 source ../emsdk/emsdk_env.sh
 
 # install cJSON
-
 git clone https://github.com/DaveGamble/cJSON.git
 cd cJSON
 mkdir build                                      

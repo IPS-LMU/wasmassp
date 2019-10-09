@@ -26,7 +26,7 @@
 
   Module.onRuntimeInitialized = async _ => {
     const api = {
-      performAssp: Module.cwrap('performAssp', 'number', ['string', 'string', 'string', 'string'])
+      performAssp: Module.cwrap('performAssp', 'number', ['string', 'string', 'string', 'string', 'string'])
     };
 
     // load audio file as arrayBuffer using fetch:
@@ -37,75 +37,80 @@
     // use exposed api function performedAssp:
     let return_code = api.performAssp("audiofile.wav", // path to audio file that is to be proc.
                                       "testout.tsv", // path to output file
-                                      "forest", // ASSP function to apply
-                                      JSON.stringify({"windowSize": 20}), // see wrassp help pages for details of available options
+                                      "forest", // ASSP function to apply (see wrassp documentation for available functions)
+                                      JSON.stringify({
+                                        "beginTime": 0, 
+                                        "effectiveLength": true, 
+                                        "windowSize": 20,
+                                        "gender": "m"
+                                      }), // see wrassp help pages for details of available options (https://CRAN.R-project.org/package=wrassp)
                                       "TSV"); // TSV (tab sep values) or SSFF // simple signal file format used in the EMU-SDMS
     console.log(return_code);                                      
-  //   if(return_code === 0){
-  //     // read resulting tsv file
-  //     let tsv = FS.readFile("testout.tsv", { encoding: 'utf8' });
-  //     console.log(tsv);
+    if(return_code === 0){
+      // read resulting tsv file
+      let tsv = FS.readFile("testout.tsv", { encoding: 'utf8' });
+      // console.log(tsv);
       
-  //     ///////////////////////////
-  //     // simple vis. using d3jsplus
+      ///////////////////////////
+      // simple vis. using echarts
 
-  //     //parse TSV file
-  //     fm = d3.tsv.parse(tsv);
-  //     fm.forEach(function(d){
-  //       d.ftime = +d.ftime //the + sign converts string automagically to number
-  //       d["fm_1(Hz)"] = +d["fm_1(Hz)"]
-  //       d["fm_2(Hz)"] = +d["fm_2(Hz)"]
-  //       d["fm_3(Hz)"] = +d["fm_3(Hz)"]
-  //       d["fm_4(Hz)"] = +d["fm_4(Hz)"]
-  //       d["bw_1(Hz)"] = +d["bw_1(Hz)"]
-  //       d["bw_2(Hz)"] = +d["bw_2(Hz)"]
-  //       d["bw_3(Hz)"] = +d["bw_3(Hz)"]
-  //       d["bw_4(Hz)"] = +d["bw_4(Hz)"]
-  //     })
-  //     console.table(fm)
+      //parse TSV file
+      fm = d3.tsv.parse(tsv);
+      fm.forEach(function(d){
+        d.ftime = +d.ftime //the + sign converts string automagically to number
+        d["fm_1(Hz)"] = +d["fm_1(Hz)"]
+        d["fm_2(Hz)"] = +d["fm_2(Hz)"]
+        d["fm_3(Hz)"] = +d["fm_3(Hz)"]
+        d["fm_4(Hz)"] = +d["fm_4(Hz)"]
+        d["bw_1(Hz)"] = +d["bw_1(Hz)"]
+        d["bw_2(Hz)"] = +d["bw_2(Hz)"]
+        d["bw_3(Hz)"] = +d["bw_3(Hz)"]
+        d["bw_4(Hz)"] = +d["bw_4(Hz)"]
+      })
+      console.table(fm)
 
-  //     fm.map(function (row) {return row.ftime;});
+      fm.map(function (row) {return row.ftime;});
 
 
-  //     // based on prepared DOM, initialize echarts instance
-  //     var myChart = echarts.init(document.getElementById('main'));
+      // based on prepared DOM, initialize echarts instance
+      var myChart = echarts.init(document.getElementById('main'));
 
-  //     // specify chart configuration item and data
-  //     var option = {
-  //         title: {
-  //             text: 'forest plotting example using wasmassp (also see console output)'
-  //         },
-  //         tooltip: {},
-  //         xAxis: {
-  //             data: fm.map(function (row) {return row.ftime;})
-  //         },
-  //         yAxis: {},
-  //         series: [{
-  //             name: 'fm_1(Hz)',
-  //             type: 'line',
-  //             stack: 'fm_1(Hz)',
-  //             data: fm.map(function (row) {return row['fm_1(Hz)'];})
-  //         },{
-  //             name: 'fm_2(Hz)',
-  //             type: 'line',
-  //             stack: 'fm_2(Hz)',
-  //             data: fm.map(function (row) {return row['fm_2(Hz)'];})
-  //         },{
-  //             name: 'fm_3(Hz)',
-  //             type: 'line',
-  //             stack: 'fm_3(Hz)',
-  //             data: fm.map(function (row) {return row['fm_3(Hz)'];})
-  //         },{
-  //             name: 'fm_4(Hz)',
-  //             type: 'line',
-  //             stack: 'fm_4(Hz)',
-  //             data: fm.map(function (row) {return row['fm_4(Hz)'];})
-  //         }]
-  //     };
+      // specify chart configuration item and data
+      var option = {
+          title: {
+              text: 'forest plotting example using wasmassp (also see console output)'
+          },
+          tooltip: {},
+          xAxis: {
+              data: fm.map(function (row) {return row.ftime;})
+          },
+          yAxis: {},
+          series: [{
+              name: 'fm_1(Hz)',
+              type: 'line',
+              stack: 'fm_1(Hz)',
+              data: fm.map(function (row) {return row['fm_1(Hz)'];})
+          },{
+              name: 'fm_2(Hz)',
+              type: 'line',
+              stack: 'fm_2(Hz)',
+              data: fm.map(function (row) {return row['fm_2(Hz)'];})
+          },{
+              name: 'fm_3(Hz)',
+              type: 'line',
+              stack: 'fm_3(Hz)',
+              data: fm.map(function (row) {return row['fm_3(Hz)'];})
+          },{
+              name: 'fm_4(Hz)',
+              type: 'line',
+              stack: 'fm_4(Hz)',
+              data: fm.map(function (row) {return row['fm_4(Hz)'];})
+          }]
+      };
 
-  //   } else {
-  //     console.error("unsuccessful run of performAssp()");
-  //   }
+    } else {
+      console.error("unsuccessful run of performAssp()");
+    }
   };
 </script>
 

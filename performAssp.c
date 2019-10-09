@@ -642,12 +642,22 @@ int performAssp(const char* audio_path,
                 const char* params_json,
                 const char* file_type) {
 
-  AOPTS           OPTS;
-  AOPTS          *opt = &OPTS;
-  A_F_LIST       *anaFunc = funclist;
+    AOPTS           OPTS;
+    AOPTS          *opt = &OPTS;
+    W_OPT          *wrasspOptions;
+    A_F_LIST       *anaFunc = funclist;
+    int             tmp,
+                    expExt = 0;
+    char            ext[SUFF_MAX + 1] = "";
+    W_GENDER       *gend = NULL;
+    WFLIST         *wPtr = NULL;
+    LP_TYPE        *lPtr = NULL;
+    SPECT_TYPE     *sPtr = NULL;
 
-  DOBJ           *inPtr,
-                *outPtr;
+    DOBJ           *inPtr,
+                   *outPtr;
+
+    int status = 0;
 
   /*
     * Third parameter must be ASSP function name
@@ -673,68 +683,600 @@ int performAssp(const char* audio_path,
   }
   
   /*
-  * parse JSON option string
+  * set options by parsing JSON option string
   */
- fprintf(stderr, "hello\n");
- cJSON *json = cJSON_Parse(params_json);
- //char *string = cJSON_Print(params_json);
-  // const nx_json* json = nx_json_parse(params_json, 0);
-  // if (json) {
+    cJSON *json = cJSON_Parse(params_json);
+    if (json == NULL) {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL)
+        {
+            fprintf(stderr, "Error before: %s\n", error_ptr);
+        }
+        status = 0;
+        goto end;
+    }
+    
+    // get first element
+    cJSON *cjsonp = json->child;
+    char *name;
+    while(cjsonp){
+        name = cjsonp->string;
+        wrasspOptions = anaFunc->options;
+        while (wrasspOptions->name != NULL) {
+            if (strcmp(wrasspOptions->name, name) == 0)
+                break;
+            wrasspOptions++;
+        }
+        if (wrasspOptions->name == NULL){
+            fprintf(stderr, "Invalid option %s for ASSP analysis %s.\n", name,
+                  anaFunc->fName);
+            status = 0;
+            goto end;
+        }
 
-  // }else{
-  //   fprintf(stderr, "couldn't parse params_json\n");
-  // }
+        switch (wrasspOptions->optNum) {
+        case WO_BEGINTIME:
+            if (!cJSON_IsNumber(cjsonp)){
+                fprintf(stderr, "No number value for %s\n", cjsonp->string);
+                status = 0;
+                goto end;
+            }
+            opt->beginTime = cjsonp->valuedouble;
+            break;
+        case WO_ENDTIME:
+            if (!cJSON_IsNumber(cjsonp)){
+                fprintf(stderr, "No number value for %s\n", cjsonp->string);
+                status = 0;
+                goto end;
+            }
+            opt->endTime = cjsonp->valuedouble;
+            break;
+        case WO_CENTRETIME:
+            if (cJSON_IsTrue(cjsonp)) {
+                opt->options |= AOPT_USE_CTIME;
+            } else {
+                opt->options &= ~AOPT_USE_CTIME;
+            }
+            break;
 
-  /*
-    * open
-    */
-//   inPtr = asspFOpen(strdup(audio_path), AFO_READ, (DOBJ *) NULL);
-//   if (inPtr == NULL){
-//       fprintf(stderr, "%s (%s)\n", getAsspMsg(asspMsgNum), strdup(audio_path));
-//       return 1;
-//   }
+        case WO_MSEFFLEN:
+            if (cJSON_IsTrue(cjsonp)) {
+                opt->options |= AOPT_EFFECTIVE;
+                switch (anaFunc->funcNum) {
+                case AF_SPECTRUM:
+                    opt->options &= ~AOPT_USE_ENBW;
+                    break;
+                default:
+                    /*
+                     * do nothing
+                     */
+                    break;
+                }
+            } else {
+                opt->options &= ~AOPT_EFFECTIVE;
+                switch (anaFunc->funcNum) {
+                case AF_FOREST:
+                    opt->gender = 'u';
+                    break;
+                default:
+                    break;
+                }
+            }
+            break;
+        case WO_MSSIZE:
+            if (!cJSON_IsNumber(cjsonp)){
+                fprintf(stderr, "No number value for %s\n", cjsonp->string);
+                status = 0;
+                goto end;
+            }
+            opt->msSize = cjsonp->valueint;
+            switch (anaFunc->funcNum) {
+            case AF_FOREST:
+                switch (opt->gender) {
+                case 'f':
+                    if (opt->msSize != FMT_DEF_EFFLENf)
+                        opt->gender = 'u';
+                    break;
+                case 'm':
+                    if (opt->msSize != FMT_DEF_EFFLENm)
+                        opt->gender = 'u';
+                    break;
+                default:
+                    break;
+                }
+                break;
+            case AF_SPECTRUM:
+                opt->options &= ~AOPT_USE_ENBW;
+                break;
+            default:
+                /*
+                 * do nothing
+                 */
+                break;
+            }
+            break;
+        case WO_MSSHIFT:
+            // TODO: cJSON_IsNumber check?
+            opt->msShift = cjsonp->valuedouble;
+            break;
+        case WO_MSSMOOTH:
+            opt->msSmooth = cjsonp->valuedouble;
+            break;
+        case WO_BANDWIDTH:
+            opt->bandwidth = cjsonp->valuedouble;
+            break;
+        case WO_RESOLUTION:
+            opt->resolution = cjsonp->valuedouble;
+            break;
+        case WO_GAIN:
+            opt->gain = cjsonp->valuedouble;
+            break;
+        case WO_RANGE:
+            opt->range = cjsonp->valuedouble;
+            break;
+        case WO_PREEMPH:
+            opt->preEmph = cjsonp->valuedouble;
+            break;
+        case WO_FFTLEN:
+            opt->FFTLen = cjsonp->valueint;
+            break;
+        case WO_CHANNEL:
+            opt->channel = cjsonp->valueint;
+            break;
+        case WO_GENDER:
+            /*
+             * some things need to be set here:
+             * for f0_ksv: maxf, minf
+             * for f0_mhs: maxf, minf
+             * for forest: eff. window length, nominal F1
+             */
+            gend = gender;
+            while (gend->ident != NULL) {
+                if (strncmp(gend->ident, cjsonp->valuestring, 1) == 0)
+                    break;
+                gend++;
+            }
+            if (gend->ident == NULL){
+                fprintf(stderr, "Invalid gender specification %s.\n", cjsonp->valuestring);
+                status = 0;
+                goto end;
+            }
+            switch (anaFunc->funcNum) {
+            case AF_KSV_PITCH:
+                tmp = setKSVgenderDefaults(opt, gend->code);
+                break;
+            case AF_MHS_PITCH:
+                tmp = setMHSgenderDefaults(opt, gend->code);
+                break;
+            case AF_FOREST:
+                if (gend->num == TG_UNKNOWN) {
+                    opt->gender = tolower((int) gend->code);
+                    tmp = 1;
+                } else
+                    tmp = setFMTgenderDefaults(opt, gend->code);
+                break;
+            default:
+                tmp = 1;
+                break;
+            }
+            if (tmp < 0){
+                fprintf(stderr, "%s", applMessage);
+            }
+            break;
+        case WO_MHS_OPT_POWER:
+            if (cJSON_IsTrue(cjsonp))
+                opt->options |= MHS_OPT_POWER;
+            else
+                opt->options &= ~MHS_OPT_POWER;
+            break;
+        case WO_ORDER:
+            tmp = opt->order;
+            opt->order = cjsonp->valueint;
+            if (anaFunc->funcNum == AF_FOREST) {
+                if ((opt->order % 2) != 0) {
+                    opt->order = tmp;
+                    fprintf(stderr, "Prediction order must be an even number.");
+                    status = 0;
+                    goto end;
+                } else {
+                    opt->options |= FMT_OPT_LPO_FIXED;
+                    opt->increment = 0;
+                }
+            }
+            break;
+        case WO_INCREMENT:
+            opt->increment = cjsonp->valueint;
+            if (anaFunc->funcNum == AF_FOREST) {
+                opt->options &= ~FMT_OPT_LPO_FIXED;
+                opt->order = 0;
+            }
+            break;
+        case WO_NUMLEVELS:
+            opt->numLevels = cjsonp->valueint;
+            break;
+        case WO_NUMFORMANTS:
+            opt->numFormants = cjsonp->valueint;
+            break;
+        case WO_PRECISION:
+            opt->precision = cjsonp->valueint;
+            break;
+        case WO_ACCURACY:
+            opt->accuracy = cjsonp->valueint;
+            break;
+        case WO_ALPHA:
+            opt->alpha = cjsonp->valuedouble;
+            break;
+        case WO_THRESHOLD:
+            opt->threshold = cjsonp->valuedouble;
+            break;
+        case WO_MAXF:
+            opt->maxF = cjsonp->valuedouble;
+            switch (anaFunc->funcNum) {
+            case AF_KSV_PITCH:
+            case AF_MHS_PITCH:
+                opt->gender = 'u';
+                break;
+            default:
+                /*
+                 * do nothing
+                 */
+                break;
+            }
+            break;
+        case WO_MINF:
+            opt->minF = cjsonp->valuedouble;
+            switch (anaFunc->funcNum) {
+            case AF_KSV_PITCH:
+            case AF_MHS_PITCH:
+                opt->gender = 'u';
+                break;
+            default:
+                /*
+                 * do nothing
+                 */
+                break;
+            }
+            break;
+        case WO_NOMF1:         /* e.g. for formant analysis */
+            opt->nomF1 = cjsonp->valuedouble;
+            switch (anaFunc->funcNum) {
+            case AF_FOREST:
+                switch (opt->gender) {
+                case 'f':
+                    if (opt->nomF1 != FMT_DEF_NOMF1f)
+                        opt->gender = 'u';
+                    break;
+                case 'm':
+                    if (opt->nomF1 != FMT_DEF_NOMF1m)
+                        opt->gender = 'u';
+                    break;
+                default:
+                    break;
+                }
+                break;
+            default:
+                /*
+                 * do nothing
+                 */
+                break;
+            }
+            break;
+        case WO_INS_EST:
+            if (cjsonp->valueint)
+                opt->options |= FMT_OPT_INS_ESTS;
+            else
+                opt->options &= ~FMT_OPT_INS_ESTS;
+            break;
+        case WO_VOIAC1PP:      /* VOICING thresholds */
+            opt->voiAC1 = cjsonp->valuedouble;
+            break;
+        case WO_VOIMAG:
+            opt->voiMag = cjsonp->valuedouble;
+            break;
+        case WO_VOIPROB:
+            opt->voiProb = cjsonp->valuedouble;
+            break;
+        case WO_VOIRMS:
+            opt->voiRMS = cjsonp->valuedouble;
+            break;
+        case WO_VOIZCR:
+            opt->voiZCR = cjsonp->valuedouble;
+            break;
+        case WO_HPCUTOFF:      /* filter parameters */
+            opt->hpCutOff = cjsonp->valuedouble;
+            if (expExt == 0)
+                tmp = getFILTtype(opt, anaFunc->defExt);
+            break;
+        case WO_LPCUTOFF:
+            opt->lpCutOff = cjsonp->valuedouble;
+            if (expExt == 0)
+                tmp = getFILTtype(opt, anaFunc->defExt);
+            break;
+        case WO_STOPDB:
+            opt->stopDB = cjsonp->valuedouble;
+            if (expExt == 0)
+                tmp = getFILTtype(opt, anaFunc->defExt);
+            break;
+        case WO_TBWIDTH:
+            opt->tbWidth = cjsonp->valuedouble;
+            if (expExt == 0)
+                tmp = getFILTtype(opt, anaFunc->defExt);
+            break;
+        case WO_USEIIR:
+            if (cjsonp->valueint)
+                opt->options |= FILT_OPT_USE_IIR;
+            else
+                opt->options &= ~FILT_OPT_USE_IIR;
+            if (expExt == 0)
+                tmp = getFILTtype(opt, anaFunc->defExt);
+            break;
+        case WO_NUMIIRSECS:
+            opt->order = cjsonp->valueint;
+            if (opt->order < 1) {
+                fprintf(stderr, "Bad value for option -numIIRsections (%i), must be greater 0 (default 4).",
+                     opt->order);
+                opt->order = FILT_DEF_SECTS;
+                status = 0;
+                goto end;
+            }
+            break;
+        case WO_TYPE:          /* hold-all */
+            switch (anaFunc->funcNum) {
+            case AF_RFCANA:
+                lPtr = lpType;
+                while (lPtr->ident != NULL) {
+                    if (strcmp(lPtr->ident, cjsonp->valuestring) == 0)
+                        break;
+                    lPtr++;
+                }
+                if (lPtr->ident == NULL){
+                    fprintf(stderr, "Invalid LP Type: %s.", cjsonp->valuestring);
+                    status = 0;
+                    goto end;
+                }
+                strncpy(opt->type, lPtr->ident, (sizeof opt->type) - 1);
+                if (expExt == 0)
+                    strncpy(ext, lPtr->ext, (sizeof ext) - 1);
+                break;
+            case AF_SPECTRUM:
+                sPtr = spectType;
+                while (sPtr->ident != NULL) {
+                    if (strcmp(sPtr->ident, cjsonp->valuestring) == 0)
+                        break;
+                    sPtr++;
+                }
+                if (sPtr->ident == NULL){
+                    fprintf(stderr, "Invalid SP Type: %s.", cjsonp->valuestring);
+                    status = 0;
+                    goto end;
+                }
+                strncpy(opt->type, sPtr->ident, (sizeof opt->type) - 1);
+                if (setSPECTdefaults(opt) < 0) {
+                    fprintf(stderr, "%s", getAsspMsg(asspMsgNum));
+                    status = 0;
+                    goto end;
+                }
+                strncpy(opt->type, sPtr->ident, (sizeof opt->type) - 1);
+                switch (sPtr->type) {
+                case DT_FTPOW:
+                case DT_FTAMP:
+                case DT_FTSQR:
+                    setDFTdefaults(opt);
+                    break;
+                case DT_FTLPS:
+                    setLPSdefaults(opt);
+                    break;
+                case DT_FTCSS:
+                    setCSSdefaults(opt);
+                    break;
+                case DT_FTCEP:
+                    setCEPdefaults(opt);
+                    break;
+                default:
+                    setAsspMsg(AEG_ERR_BUG,
+                               "setSPECTdefaults: invalid default type");
+                    fprintf(stderr, "%s.", getAsspMsg(asspMsgNum));
+                    status = 0;
+                    goto end;
+                    break;
+                }
+                if (expExt == 0)
+                    strncpy(ext, sPtr->ext, (sizeof ext) - 1);
+                break;
+            default:
+                break;
+            }
+            break;
+        case WO_WINFUNC:
+            wPtr = wfLongList;
+            while (wPtr->code != NULL) {
+                if (strcmp(wPtr->code, cjsonp->valuestring) == 0)
+                    break;
+                wPtr++;
+            }
+            if (wPtr->code == NULL){
+                fprintf(stderr, "Invalid window function code %s.",
+                      cjsonp->valuestring);
+                status = 0;
+                goto end;
+            }
+            strncpy(opt->winFunc, wPtr->code, (sizeof opt->winFunc) - 1);
+            break;
+            /*
+             * These are not in libassp but in wrassp
+             */
+        case WO_ENERGYNORM:
+            if (cJSON_IsTrue(cjsonp))
+                opt->options |= ACF_OPT_NORM;
+            else
+                opt->options &= ~ACF_OPT_NORM;
+            break;
+        case WO_LENGTHNORM:
+            if (cJSON_IsTrue(cjsonp))
+                opt->options |= ACF_OPT_MEAN;
+            else
+                opt->options &= ~ACF_OPT_MEAN;
+            break;
+        case WO_DIFF_OPT_BACKWARD:
+            if (cJSON_IsTrue(cjsonp))
+                opt->options |= DIFF_OPT_BACKWARD;
+            else
+                opt->options &= ~DIFF_OPT_BACKWARD;
+            break;
+        case WO_DIFF_OPT_CENTRAL:
+            if (cJSON_IsTrue(cjsonp))
+                opt->options |= DIFF_OPT_CENTRAL;
+            else
+                opt->options &= ~DIFF_OPT_CENTRAL;
+            break;
+        case WO_RMS_OPT_LINEAR:
+            if (cJSON_IsTrue(cjsonp))
+                opt->options |= RMS_OPT_LINEAR;
+            else
+                opt->options &= ~RMS_OPT_LINEAR;
+            break;
+        case WO_LPS_OPT_DEEMPH:
+            if (cJSON_IsTrue(cjsonp))
+                opt->options |= LPS_OPT_DEEMPH;
+            else
+                opt->options &= ~LPS_OPT_DEEMPH;
+            break;
+        case WO_OUTPUTEXT:
+            // not allowed in wasmassp
+            break;
+            // if (TYPEOF(el) == NILSXP) {
+            //     expExt = 0;
+            //     break;
+            // }
+            // cPtr = strdup(CHAR(STRING_ELT(el, 0)));
+            // if (*cPtr != '.' && strlen(cPtr) != 0) {
+            //     strncpy(ext, ".", strlen(".") + 1);
+            //     strcat(ext, cPtr);
+            // } else {
+            //     strncpy(ext, cPtr,  (sizeof ext) - 1);
+            // }
+            // free(cPtr);
+            // expExt = 1;
+            // switch (anaFunc->funcNum) {
+            // case AF_RFCANA:
+            //     lPtr = lpType;
+            //     while (lPtr->ident != NULL) {
+            //         if (strcmp(opt->type, lPtr->ident) == 0)
+            //             break;
+            //         lPtr++;
+            //     }
+            //     if (lPtr->ident == NULL)
+            //         error("Bad LP Type in memory (%s).", opt->type);
+            //     if (strcmp(lPtr->ext, ext) == 0) {
+            //         expExt = 0;
+            //     } else {
+            //         expExt = 1;
+            //     }
+            //     break;
+            // case AF_SPECTRUM:
+            //     sPtr = spectType;
+            //     while (sPtr->ident != NULL) {
+            //         if (strcmp(opt->type, sPtr->ident) == 0)
+            //             break;
+            //         sPtr++;
+            //     }
+            //     if (sPtr->ident == NULL)
+            //         error("Bad SP Type in memory (%s).", opt->type);
+            //     if (strcmp(sPtr->ext, ext) == 0) {
+            //         expExt = 0;
+            //     } else {
+            //         expExt = 1;
 
-//   /*
-//     * run the function (as pointed to in the descriptor) to generate
-//     * the output object 
-//     */
-//   outPtr = (anaFunc->compProc) (inPtr, opt, (DOBJ *) NULL);
-//   if (outPtr == NULL) {
-//       asspFClose(inPtr, AFC_FREE);
-//       fprintf(stderr, "%s (%s)\n", getAsspMsg(asspMsgNum), strdup(audio_path));
-//       return 1;
-//   }
+            //     }
+            //     break;
+            // default:
+            //     break;
+            // }
+            break;
+        case WO_TOFILE:
+            // not allowed in wasmassp
+            // toFile = INTEGER(el)[0] != 0;
+            break;
+        case WO_OUTPUTDIR:
+            // not allowed in wasmassp
+            // if (el == R_NilValue) {
+            //     outDir = NULL;
+            //     break;
+            // }
+            // outDir = strdup(CHAR(STRING_ELT(el, 0)));
+            // if (outDir[strlen(outDir) - 1] != DIR_SEP_CHR) {
+            //     /* add trailing slash, but we need a bit more space first */
+            //     char *tmp = malloc(strlen(outDir) + 2);
+            //     strcpy(tmp, outDir);
+            //     tmp = strcat(tmp, DIR_SEP_STR);
+            //     free(outDir);
+            //     outDir = tmp;
+            // }
+            break;
+        case WO_PBAR:
+            // not allowed in wasmassp
+            // pBar = el;
+            break;
+        default:
+            break;
+        }
+        // move pointer 4ward
+        cjsonp = cjsonp->next;
+    }
 
-//   /*
-//    * input data object no longer needed 
-//    */
-//   asspFClose(inPtr, AFC_FREE);
 
-//   /*
-//    * write to file (either TSV (tab sep. values) or SSFF)
-//    * depending on file_type arg
-//    */
-//   if(strcmp(file_type, "TSV") == 0){
-//     FILE *f = fopen(out_path, "w");
-//     if (f == NULL){
-//         fprintf(stderr, "Error opening out_path file!\n");
-//         exit(1);
-//     }
-//     int res = dobj2tsv(outPtr, f);
-//     fclose(f);
-//   } else {
 
-//     outPtr = asspFOpen(out_path, AFO_WRITE, outPtr);
-//     if (outPtr == NULL) {
-//         asspFClose(outPtr, AFC_FREE);
-//         printf("%s (%s)\n", getAsspMsg(asspMsgNum), strdup(out_path));
-//     }
-//     asspFClose(outPtr, AFC_FREE);
-//   }
-  return 0;
-  // end:
-  //   cJSON_Delete(json);
-  //   return status;
+    /*
+     * open
+     */
+    inPtr = asspFOpen(strdup(audio_path), AFO_READ, (DOBJ *) NULL);
+    if (inPtr == NULL){
+        fprintf(stderr, "%s (%s)\n", getAsspMsg(asspMsgNum), strdup(audio_path));
+        return 1;
+    }
+
+    /*
+     * run the function (as pointed to in the descriptor) to generate
+     * the output object 
+     */
+    outPtr = (anaFunc->compProc) (inPtr, opt, (DOBJ *) NULL);
+    if (outPtr == NULL) {
+        asspFClose(inPtr, AFC_FREE);
+        fprintf(stderr, "%s (%s)\n", getAsspMsg(asspMsgNum), strdup(audio_path));
+        return 1;
+    }
+
+    /*
+     * input data object no longer needed 
+     */
+    asspFClose(inPtr, AFC_FREE);
+
+    /*
+     * write to file (either TSV (tab sep. values) or SSFF)
+     * depending on file_type arg
+     */
+    if(strcmp(file_type, "TSV") == 0){
+        FILE *f = fopen(out_path, "w");
+        if (f == NULL){
+            fprintf(stderr, "Error opening out_path file!\n");
+            exit(1);
+        }
+        int res = dobj2tsv(outPtr, f);
+        fclose(f);
+    } else {
+
+        outPtr = asspFOpen(out_path, AFO_WRITE, outPtr);
+        if (outPtr == NULL) {
+            asspFClose(outPtr, AFC_FREE);
+            printf("%s (%s)\n", getAsspMsg(asspMsgNum), strdup(out_path));
+        }
+        asspFClose(outPtr, AFC_FREE);
+    }
+    return 0;
+    
+    end:
+        cJSON_Delete(json);
+        return status;
 }
 
 
