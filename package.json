@@ -17,6 +17,6 @@
   },
   "homepage": "https://github.com/IPS-LMU/wasmassp#readme",
   "dependencies": {
-    "echarts": "^4.3.0"
+    "echarts": "^5.4.2"
   }
 }
